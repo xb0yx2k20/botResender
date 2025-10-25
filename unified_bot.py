@@ -96,7 +96,27 @@ FORWARD_CONFIG = {
     }
 }
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+# Настройка логирования в файл
+import os
+from datetime import datetime
+
+# Создаем директорию для логов если её нет
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+# Создаем имя файла с текущей датой
+log_filename = f"{log_dir}/bot_{datetime.now().strftime('%Y-%m-%d')}.log"
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_filename, encoding='utf-8'),
+        logging.StreamHandler()  # Также выводим в консоль
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Уменьшаем уровень логирования Telethon для скрытия служебных сообщений
@@ -108,10 +128,10 @@ client = TelegramClient('unified_bot_session', API_ID, API_HASH)
 async def forward_messages_with_keyword(source_chat_id, target_chat_ids, keywords, limit=2000):
     """Пересылает последние сообщения по ключевым словам (включая медиагруппы)"""
     try:
-        print(f"🔍 Поиск сообщений с ключевыми словами в чате {source_chat_id}...")
+        logger.info(f"🔍 Поиск сообщений с ключевыми словами в чате {source_chat_id}...")
 
         chat = await client.get_entity(source_chat_id)
-        print(f"📡 Чат: {getattr(chat, 'title', 'Без названия')}")
+        logger.info(f"📡 Чат: {getattr(chat, 'title', 'Без названия')}")
 
         matching_messages = []
 
@@ -124,7 +144,7 @@ async def forward_messages_with_keyword(source_chat_id, target_chat_ids, keyword
             for keyword in keywords:
                 if keyword.lower() in text_lower:
                     matching_messages.append(message)
-                    print(f"🎯 Найдено сообщение с '{keyword}': ID {message.id}")
+                    logger.info(f"🎯 Найдено сообщение с '{keyword}': ID {message.id}")
                     break
             
             # Небольшая задержка для предотвращения flood wait (только каждые 10 сообщений)
@@ -132,19 +152,19 @@ async def forward_messages_with_keyword(source_chat_id, target_chat_ids, keyword
                 await asyncio.sleep(0.05)
 
         if not matching_messages:
-            print("❌ Сообщений с ключевыми словами не найдено.")
+            logger.info("❌ Сообщений с ключевыми словами не найдено.")
             return
 
         # Берём самое новое совпадение
         last_matching_message = matching_messages[0]
-        print(f"📨 Последнее подходящее сообщение: ID {last_matching_message.id}")
+        logger.info(f"📨 Последнее подходящее сообщение: ID {last_matching_message.id}")
 
         # Проверяем, медиагруппа ли это
         messages_to_forward = []
 
         if last_matching_message.grouped_id:
             gid = last_matching_message.grouped_id
-            print(f"🖼 Это часть медиагруппы (grouped_id={gid}) — ищу все части...")
+            logger.info(f"🖼 Это часть медиагруппы (grouped_id={gid}) — ищу все части...")
 
             # Собираем все сообщения с тем же grouped_id
             all_grouped_messages = []
@@ -158,37 +178,37 @@ async def forward_messages_with_keyword(source_chat_id, target_chat_ids, keyword
             # Сортируем по ID для правильного порядка (от старых к новым)
             all_grouped_messages.sort(key=lambda x: x.id)
             messages_to_forward = all_grouped_messages
-            print(f"📸 Собрано частей медиагруппы: {len(messages_to_forward)}")
+            logger.info(f"📸 Собрано частей медиагруппы: {len(messages_to_forward)}")
             
             # Логируем найденные сообщения
             for i, msg in enumerate(messages_to_forward):
-                print(f"   {i+1}. ID {msg.id}, дата: {msg.date}")
+                logger.info(f"   {i+1}. ID {msg.id}, дата: {msg.date}")
         else:
             messages_to_forward = [last_matching_message]
-            print("✉️ Это одиночное сообщение")
+            logger.info("✉️ Это одиночное сообщение")
 
         # Пересылаем во все целевые чаты
         success_count = 0
         for target_chat_id in target_chat_ids:
             try:
                 await client.forward_messages(target_chat_id, messages_to_forward)
-                print(f"✅ Переслано {len(messages_to_forward)} сообщений в {target_chat_id}")
+                logger.info(f"✅ Переслано {len(messages_to_forward)} сообщений в {target_chat_id}")
                 success_count += 1
             except Exception as e:
-                print(f"❌ Ошибка пересылки в {target_chat_id}: {e}")
+                logger.error(f"❌ Ошибка пересылки в {target_chat_id}: {e}")
 
-        print(f"🎉 Пересылка завершена! Успешно переслано в {success_count} чатов.")
+        logger.info(f"🎉 Пересылка завершена! Успешно переслано в {success_count} чатов.")
 
     except Exception as e:
-        print(f"❌ Ошибка пересылки по ключевым словам: {e}")
+        logger.error(f"❌ Ошибка пересылки по ключевым словам: {e}")
 async def forward_all_messages(source_chat_id, target_chat_ids, limit=50):
     """Пересылает последнее сообщение из чата"""
     try:
-        print(f"🔍 Пересылаю последнее сообщение из чата {source_chat_id}...")
+        logger.info(f"🔍 Пересылаю последнее сообщение из чата {source_chat_id}...")
         
         # Получаем информацию о чате
         chat = await client.get_entity(source_chat_id)
-        print(f"📡 Чат: {getattr(chat, 'title', 'Без названия')}")
+        logger.info(f"📡 Чат: {getattr(chat, 'title', 'Без названия')}")
         
         # Получаем только последнее сообщение
         last_message = None
@@ -197,33 +217,33 @@ async def forward_all_messages(source_chat_id, target_chat_ids, limit=50):
             break
         
         if not last_message:
-            print("❌ Сообщений не найдено")
+            logger.info("❌ Сообщений не найдено")
             return
         
-        print(f"📨 Найдено последнее сообщение: ID {last_message.id}")
+        logger.info(f"📨 Найдено последнее сообщение: ID {last_message.id}")
         
         # Получаем информацию об отправителе
         sender = await last_message.get_sender()
         sender_name = getattr(sender, "first_name", "") or getattr(sender, "title", "Без имени")
         text = last_message.text or "<медиа>"
         
-        print(f"👤 Отправитель: {sender_name}")
-        print(f"📝 Текст: {text[:100]}...")
+        logger.info(f"👤 Отправитель: {sender_name}")
+        logger.info(f"📝 Текст: {text[:100]}...")
         
         # Пересылаем последнее сообщение во все целевые чаты
         success_count = 0
         for target_chat_id in target_chat_ids:
             try:
                 await client.forward_messages(target_chat_id, last_message)
-                print(f"✅ Последнее сообщение переслано в {target_chat_id}")
+                logger.info(f"✅ Последнее сообщение переслано в {target_chat_id}")
                 success_count += 1
             except Exception as e:
-                print(f"❌ Ошибка пересылки в {target_chat_id}: {e}")
+                logger.error(f"❌ Ошибка пересылки в {target_chat_id}: {e}")
         
-        print(f"\n🎉 Пересылка завершена! Успешно переслано в {success_count} чатов")
+        logger.info(f"\n🎉 Пересылка завершена! Успешно переслано в {success_count} чатов")
         
     except Exception as e:
-        print(f"❌ Ошибка пересылки последнего сообщения: {e}")
+        logger.error(f"❌ Ошибка пересылки последнего сообщения: {e}")
 
 @client.on(events.NewMessage)
 async def handle_new_message(event):
@@ -250,7 +270,7 @@ async def handle_new_message(event):
         if filter_type == 'all':
             # Пересылаем все сообщения
             should_forward = True
-            print(f"\n📨 Новое сообщение из {source_chat_id}")
+            logger.info(f"\n📨 Новое сообщение из {source_chat_id}")
             
         elif filter_type == 'keyword':
             # Проверяем ключевые слова
@@ -260,12 +280,12 @@ async def handle_new_message(event):
             for keyword in keywords:
                 if keyword.lower() in text_lower:
                     should_forward = True
-                    print(f"\n🎯 Сообщение с ключевым словом '{keyword}' из {source_chat_id}")
+                    logger.info(f"\n🎯 Сообщение с ключевым словом '{keyword}' из {source_chat_id}")
                     break
             
             if not should_forward:
-                print(f"🎯 Сообщение не содержит ключевых слов - пропускаем")
-                print(f"📝 Текст: {text[:50]}...")
+                logger.info(f"🎯 Сообщение не содержит ключевых слов - пропускаем")
+                logger.info(f"📝 Текст: {text[:50]}...")
                 return
         
         if should_forward:
@@ -275,7 +295,7 @@ async def handle_new_message(event):
             if event.message.grouped_id:
                 # Это медиагруппа - собираем все части
                 gid = event.message.grouped_id
-                print(f"🖼 Обнаружена медиагруппа (grouped_id={gid}) — собираю все части...")
+                logger.info(f"🖼 Обнаружена медиагруппа (grouped_id={gid}) — собираю все части...")
                 
                 # Собираем все сообщения с тем же grouped_id
                 all_grouped_messages = []
@@ -289,73 +309,74 @@ async def handle_new_message(event):
                 # Сортируем по ID для правильного порядка (от старых к новым)
                 all_grouped_messages.sort(key=lambda x: x.id)
                 messages_to_forward = all_grouped_messages
-                print(f"📸 Собрано частей медиагруппы: {len(messages_to_forward)}")
+                logger.info(f"📸 Собрано частей медиагруппы: {len(messages_to_forward)}")
                 
                 # Логируем найденные сообщения
                 for i, msg in enumerate(messages_to_forward):
-                    print(f"   {i+1}. ID {msg.id}, дата: {msg.date}")
+                    logger.info(f"   {i+1}. ID {msg.id}, дата: {msg.date}")
             else:
                 # Одиночное сообщение
                 messages_to_forward = [event.message]
-                print("✉️ Одиночное сообщение")
+                logger.info("✉️ Одиночное сообщение")
             
             # Пересылаем во все целевые чаты
             success_count = 0
             for target_chat_id in target_chat_ids:
                 try:
                     await client.forward_messages(target_chat_id, messages_to_forward)
-                    print(f"✅ Переслано {len(messages_to_forward)} сообщений в {target_chat_id}!")
+                    logger.info(f"✅ Переслано {len(messages_to_forward)} сообщений в {target_chat_id}!")
                     success_count += 1
                 except Exception as e:
-                    print(f"❌ Ошибка пересылки в {target_chat_id}: {e}")
+                    logger.error(f"❌ Ошибка пересылки в {target_chat_id}: {e}")
             
-            print(f"👤 От: {sender_name}")
-            print(f"💬 Текст: {text}")
-            print(f"📤 В чаты: {target_chat_ids}")
-            print(f"📋 Конфигурация: {config['description']}")
-            print(f"🎉 Успешно переслано в {success_count} чатов")
-            print("-" * 50)
+            logger.info(f"👤 От: {sender_name}")
+            logger.info(f"💬 Текст: {text}")
+            logger.info(f"📤 В чаты: {target_chat_ids}")
+            logger.info(f"📋 Конфигурация: {config['description']}")
+            logger.info(f"🎉 Успешно переслано в {success_count} чатов")
+            logger.info("-" * 50)
         
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения: {e}")
 
 async def main():
-    print("🚀 Запуск универсального бота (множественная пересылка)...")
-    print("📱 При первом запуске потребуется авторизация")
-    print("📞 Введите номер телефона в формате +79123456789")
-    print("🔐 Введите код из SMS")
-    print("🔑 При необходимости введите пароль двухфакторной аутентификации")
-    print()
+    logger.info("🚀 Запуск универсального бота (множественная пересылка)...")
+    logger.info(f"📝 Логи записываются в файл: {log_filename}")
+    logger.info("📱 При первом запуске потребуется авторизация")
+    logger.info("📞 Введите номер телефона в формате +79123456789")
+    logger.info("🔐 Введите код из SMS")
+    logger.info("🔑 При необходимости введите пароль двухфакторной аутентификации")
+    logger.info("")
     
     try:
         await client.start()
-        print("✅ Бот подключен!")
+        logger.info("✅ Бот подключен!")
         
         # Показываем конфигурацию
-        print("\n📋 Настроенные пересылки:")
+        logger.info("\n📋 Настроенные пересылки:")
         for source, config in FORWARD_CONFIG.items():
-            print(f"📡 {source} -> {config['targets']}")
-            print(f"   Тип: {config['filter_type']}")
-            print(f"   Описание: {config['description']}")
+            logger.info(f"📡 {source} -> {config['targets']}")
+            logger.info(f"   Тип: {config['filter_type']}")
+            logger.info(f"   Описание: {config['description']}")
             if config['filter_type'] == 'keyword':
-                print(f"   Ключевые слова: {', '.join(config['keywords'])}")
-            print()
+                logger.info(f"   Ключевые слова: {', '.join(config['keywords'])}")
+            logger.info("")
         
-        print("\n🎯 Выберите режим работы:")
-        print("1. Переслать ПОСЛЕДНИЕ сообщения из всех чатов (для проверки)")
-        print("2. Мониторинг новых сообщений (режим по умолчанию)")
+        logger.info("\n🎯 Выберите режим работы:")
+        logger.info("1. Переслать ПОСЛЕДНИЕ сообщения из всех чатов (для проверки)")
+        logger.info("2. Мониторинг новых сообщений (режим по умолчанию)")
         
         try:
             choice = input("\nВведите номер (1-2): ").strip()
             
             if choice == "1":
-                print("\n🔄 Пересылка последних сообщений из всех чатов...")
+                logger.info("\n🔄 Пересылка последних сообщений из всех чатов...")
                 
                 for source_chat_id, config in FORWARD_CONFIG.items():
                     target_chat_ids = config['targets']
                     filter_type = config['filter_type']
                     
-                    print(f"\n📡 Обрабатываю чат {source_chat_id}...")
+                    logger.info(f"\n📡 Обрабатываю чат {source_chat_id}...")
                     
                     if filter_type == 'keyword':
                         await forward_messages_with_keyword(
@@ -366,29 +387,29 @@ async def main():
                     elif filter_type == 'all':
                         await forward_all_messages(source_chat_id, target_chat_ids)
                 
-                print("\n✅ Пересылка завершена! Теперь запускаю мониторинг...")
-                print("🔄 Мониторинг новых сообщений...")
-                print("⏳ Жду новые сообщения...")
+                logger.info("\n✅ Пересылка завершена! Теперь запускаю мониторинг...")
+                logger.info("🔄 Мониторинг новых сообщений...")
+                logger.info("⏳ Жду новые сообщения...")
                 await client.run_until_disconnected()
             else:
-                print("🔄 Мониторинг новых сообщений...")
-                print("⏳ Жду новые сообщения...")
+                logger.info("🔄 Мониторинг новых сообщений...")
+                logger.info("⏳ Жду новые сообщения...")
                 await client.run_until_disconnected()
                 
         except KeyboardInterrupt:
-            print("\n🛑 Остановка по Ctrl+C")
+            logger.info("\n🛑 Остановка по Ctrl+C")
         except Exception as e:
-            print(f"❌ Ошибка ввода: {e}")
-            print("🔄 Запускаю мониторинг...")
+            logger.error(f"❌ Ошибка ввода: {e}")
+            logger.info("🔄 Запускаю мониторинг...")
             await client.run_until_disconnected()
             
     except KeyboardInterrupt:
-        print("🛑 Остановка по Ctrl+C")
+        logger.info("🛑 Остановка по Ctrl+C")
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        logger.error(f"❌ Ошибка: {e}")
     finally:
         await client.disconnect()
-        print("👋 Бот остановлен")
+        logger.info("👋 Бот остановлен")
 
 if __name__ == "__main__":
     asyncio.run(main())
